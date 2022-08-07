@@ -1,0 +1,30 @@
+package go_workflow
+
+import (
+	"context"
+	"os"
+)
+
+type Step interface {
+	GetStatus() Status
+	Execute(context context.Context, stdout *os.File) (map[string]string, error)
+	Cancel() error
+	GetId() string
+	GetOutput() map[string]string
+}
+
+type StepWithInit interface {
+	Step
+	Init(context context.Context) error
+}
+
+type StepWithTearDown interface {
+	Step
+	TearDown(context context.Context) error
+}
+
+// Workflow contains a list of steps and behave like any other step
+type Workflow interface {
+	Step
+	AddStep(step *Step, dependencies []*Step) error
+}
