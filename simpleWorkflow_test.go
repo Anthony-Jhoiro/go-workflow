@@ -1,7 +1,6 @@
 package go_workflow
 
 import (
-	"container/list"
 	"context"
 	"errors"
 	"os"
@@ -69,7 +68,7 @@ func TestMakeSimpleWorkflow(t *testing.T) {
 		{
 			name: "Create simple workflow",
 			want: &SimpleWorkflow{
-				steps:        list.New(),
+				steps:        []Step{},
 				status:       CREATED,
 				dependencies: map[Step][]Step{},
 			},
@@ -77,7 +76,7 @@ func TestMakeSimpleWorkflow(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := MakeSimpleWorkflow(); !reflect.DeepEqual(got, tt.want) {
+			if got := MakeSimpleWorkflow(1); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("MakeSimpleWorkflow() = %v, want %v", got, tt.want)
 			}
 		})
@@ -86,7 +85,7 @@ func TestMakeSimpleWorkflow(t *testing.T) {
 
 func TestSimpleWorkflow_GetStatus(t *testing.T) {
 	type fields struct {
-		steps        *list.List
+		steps        []Step
 		status       Status
 		dependencies map[Step][]Step
 	}
@@ -162,7 +161,7 @@ func Test_joinErrorList(t *testing.T) {
 
 func TestSimpleWorkflow_Execute(t *testing.T) {
 	type fields struct {
-		steps        *list.List
+		steps        []Step
 		status       Status
 		dependencies map[Step][]Step
 	}
@@ -173,16 +172,6 @@ func TestSimpleWorkflow_Execute(t *testing.T) {
 	errorA, _ := makeSimpleStep("error-a")
 	errorB, _ := makeSimpleStep("error-b")
 	errorD, _ := makeErrorStep("error-d")
-
-	steps := list.New()
-	steps.PushBack(stepA)
-	steps.PushBack(stepB)
-	steps.PushBack(stepC)
-
-	steps2 := list.New()
-	steps2.PushBack(errorA)
-	steps2.PushBack(errorB)
-	steps2.PushBack(errorD)
 
 	type args struct {
 		ctx    context.Context
@@ -199,7 +188,7 @@ func TestSimpleWorkflow_Execute(t *testing.T) {
 		{
 			name: "3 steps execution",
 			fields: fields{
-				steps:  steps,
+				steps:  []Step{stepA, stepB, stepC},
 				status: CREATED,
 				dependencies: map[Step][]Step{
 					stepA: {stepB, stepC},
@@ -226,7 +215,7 @@ func TestSimpleWorkflow_Execute(t *testing.T) {
 		{
 			name: "with cancel",
 			fields: fields{
-				steps:  steps2,
+				steps:  []Step{errorA, errorB, errorD},
 				status: CREATED,
 				dependencies: map[Step][]Step{
 					errorD: {},
@@ -267,8 +256,7 @@ func TestSimpleWorkflow_Execute(t *testing.T) {
 				t.Errorf("Execute() got = %v, want %v", got, tt.want)
 			}
 			for step, status := range tt.wantStatus {
-				for e := s.steps.Front(); e != nil; e = e.Next() {
-					wfStep := e.Value.(Step)
+				for _, wfStep := range s.steps {
 					if wfStep.GetId() == step.GetId() {
 						if wfStep.GetStatus().GetCode() != status.GetCode() {
 							t.Errorf("Execute() step  %v status got= %v, want %v", wfStep.GetId(), wfStep.GetStatus().GetName(), status.GetName())
@@ -283,7 +271,7 @@ func TestSimpleWorkflow_Execute(t *testing.T) {
 
 func TestSimpleWorkflow_Init(t *testing.T) {
 	type fields struct {
-		steps        *list.List
+		steps        []Step
 		status       Status
 		dependencies map[Step][]Step
 	}
@@ -295,12 +283,6 @@ func TestSimpleWorkflow_Init(t *testing.T) {
 	C, _ := makeSimpleStep("step-c")
 	D, _ := makeSimpleStep("step-d")
 
-	steps := list.New()
-	steps.PushBack(A)
-	steps.PushBack(B)
-	steps.PushBack(C)
-	steps.PushBack(D)
-
 	tests := []struct {
 		name    string
 		fields  fields
@@ -310,7 +292,7 @@ func TestSimpleWorkflow_Init(t *testing.T) {
 		{
 			name: "With no dependency",
 			fields: fields{
-				steps: steps,
+				steps: []Step{A, B, C, D},
 				dependencies: map[Step][]Step{
 					A: {},
 					B: {},
@@ -324,7 +306,7 @@ func TestSimpleWorkflow_Init(t *testing.T) {
 		{
 			name: "With no cycles",
 			fields: fields{
-				steps: steps,
+				steps: []Step{A, B, C, D},
 				dependencies: map[Step][]Step{
 					A: {},
 					B: {A},
@@ -338,7 +320,7 @@ func TestSimpleWorkflow_Init(t *testing.T) {
 		{
 			name: "With cycle",
 			fields: fields{
-				steps: steps,
+				steps: []Step{A, B, C, D},
 				dependencies: map[Step][]Step{
 					A: {B},
 					B: {C},
@@ -352,7 +334,7 @@ func TestSimpleWorkflow_Init(t *testing.T) {
 		{
 			name: "Without complex cycles",
 			fields: fields{
-				steps: steps,
+				steps: []Step{A, B, C, D},
 				dependencies: map[Step][]Step{
 					A: {},
 					B: {A, D, C},
@@ -380,7 +362,7 @@ func TestSimpleWorkflow_Init(t *testing.T) {
 
 func TestSimpleWorkflow_AddStep(t *testing.T) {
 	type fields struct {
-		steps        *list.List
+		steps        []Step
 		status       Status
 		dependencies map[Step][]Step
 	}
@@ -389,8 +371,6 @@ func TestSimpleWorkflow_AddStep(t *testing.T) {
 		dependencies []Step
 	}
 	step, _ := makeSimpleStep("sample-step")
-	stepList := list.New()
-	stepList.PushBack(step)
 
 	tests := []struct {
 		name    string
@@ -401,7 +381,7 @@ func TestSimpleWorkflow_AddStep(t *testing.T) {
 		{
 			name: "Add step without error",
 			fields: fields{
-				steps:        list.New(),
+				steps:        []Step{},
 				dependencies: make(map[Step][]Step),
 			},
 			args:    args{step: step, dependencies: []Step{}},
@@ -410,10 +390,10 @@ func TestSimpleWorkflow_AddStep(t *testing.T) {
 		{
 			name: "Add step that already exists",
 			fields: fields{
-				steps:        stepList,
+				steps:        []Step{step},
 				dependencies: make(map[Step][]Step),
 			},
-			args:    args{step: step},
+			args:    args{step: step, dependencies: []Step{}},
 			wantErr: true,
 		},
 	}

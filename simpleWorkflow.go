@@ -1,7 +1,6 @@
 package go_workflow
 
 import (
-	"container/list"
 	"context"
 	"fmt"
 	"log"
@@ -10,7 +9,7 @@ import (
 )
 
 type SimpleWorkflow struct {
-	steps        *list.List
+	steps        []Step
 	status       Status
 	dependencies map[Step][]Step
 }
@@ -38,7 +37,7 @@ func (s SimpleWorkflow) hasCycle(visited []Step, secureCycles []Step, currentSte
 	}
 	visited = append(visited, currentStep)
 
-	currentStepSecureCycles := make([]Step, 0, s.steps.Len())
+	currentStepSecureCycles := make([]Step, 0, len(s.steps))
 
 	// Check for each step if its dependencies contains cycles
 	if dependencies, ok := s.dependencies[currentStep]; ok {
@@ -57,11 +56,10 @@ func (s SimpleWorkflow) hasCycle(visited []Step, secureCycles []Step, currentSte
 }
 
 func (s *SimpleWorkflow) Init(context context.Context) error {
-	visitedSteps := make([]Step, 0, s.steps.Len())
-	secureSteps := make([]Step, 0, s.steps.Len())
+	visitedSteps := make([]Step, 0, len(s.steps))
+	secureSteps := make([]Step, 0, len(s.steps))
 
-	for e := s.steps.Front(); e != nil; e = e.Next() {
-		currentStep := e.Value.(Step)
+	for _, currentStep := range s.steps {
 		if hasCycles, stepDependency := s.hasCycle(visitedSteps, secureSteps, currentStep); !hasCycles {
 			secureSteps = append(secureSteps, stepDependency...)
 		} else {
@@ -75,9 +73,9 @@ func (s *SimpleWorkflow) Init(context context.Context) error {
 var stepOutputContextKey struct{}
 
 // MakeSimpleWorkflow creates a SimpleWorkflow instance
-func MakeSimpleWorkflow() *SimpleWorkflow {
+func MakeSimpleWorkflow(stepCount uint) *SimpleWorkflow {
 	return &SimpleWorkflow{
-		steps:        list.New(),
+		steps:        make([]Step, 0, stepCount),
 		status:       CREATED,
 		dependencies: make(map[Step][]Step),
 	}
@@ -88,9 +86,8 @@ func (s SimpleWorkflow) GetStatus() Status {
 }
 
 func (s *SimpleWorkflow) getNextSteps() []Step {
-	nextSteps := make([]Step, 0, s.steps.Len())
-	for e := s.steps.Front(); e != nil; e = e.Next() {
-		step := e.Value.(Step)
+	nextSteps := make([]Step, 0, len(s.steps))
+	for _, step := range s.steps {
 		if !step.GetStatus().IsFinished() && step.GetStatus() != RUNNING && areRequirementsFullFilled(step, s.dependencies) {
 			nextSteps = append(nextSteps, step)
 		}
@@ -108,7 +105,7 @@ func (s *SimpleWorkflow) executeStep(ctx context.Context, step Step, stdout *os.
 }
 
 func (s *SimpleWorkflow) cancelNextSteps(lastStep Step) error {
-	errorsLst := createErrorList(s.steps.Len())
+	errorsLst := createErrorList(len(s.steps))
 
 	concernedSteps := getStepThatRequires(lastStep, s.dependencies)
 
@@ -140,16 +137,14 @@ func (s *SimpleWorkflow) getRequirementsOutputs(step Step) map[string]map[string
 
 func (s *SimpleWorkflow) getOutput() map[string]map[string]string {
 	output := make(map[string]map[string]string)
-	for e := s.steps.Front(); e != nil; e = e.Next() {
-		step := e.Value.(Step)
+	for _, step := range s.steps {
 		output[step.GetId()] = step.GetOutput()
 	}
 	return output
 }
 
 func (s *SimpleWorkflow) hasUnfinishedSteps() bool {
-	for e := s.steps.Front(); e != nil; e = e.Next() {
-		step := e.Value.(Step)
+	for _, step := range s.steps {
 		if !step.GetStatus().IsFinished() {
 			return true
 		}
@@ -158,8 +153,8 @@ func (s *SimpleWorkflow) hasUnfinishedSteps() bool {
 }
 
 func (s *SimpleWorkflow) Execute(ctx context.Context, stdout *os.File) (map[string]map[string]string, error) {
-	closingSteps := make(chan Step, s.steps.Len())
-	errorLst := make([]error, 0, s.steps.Len())
+	closingSteps := make(chan Step, len(s.steps))
+	errorLst := make([]error, 0, len(s.steps))
 
 	activeSteps := &sync.WaitGroup{}
 
@@ -195,8 +190,7 @@ func (s *SimpleWorkflow) Execute(ctx context.Context, stdout *os.File) (map[stri
 }
 
 func (s *SimpleWorkflow) cancelRemainingSteps(errorLst []error) []error {
-	for e := s.steps.Front(); e != nil; e = e.Next() {
-		step := e.Value.(Step)
+	for _, step := range s.steps {
 		if step.GetStatus().IsCancellable() {
 			err := step.Cancel()
 			if err != nil {
@@ -221,25 +215,19 @@ func (s *SimpleWorkflow) startNextSteps(ctx context.Context, stdout *os.File, ac
 }
 
 func (s *SimpleWorkflow) debug() {
-	for e := s.steps.Front(); e != nil; e = e.Next() {
-		step := e.Value.(Step)
+	for _, step := range s.steps {
 		log.Printf("[DEBUG]: %v : %v", step.GetId(), step.GetStatus().GetName())
 	}
 }
 
 func (s *SimpleWorkflow) AddStep(step Step, dependencies []Step) error {
-	for e := s.steps.Front(); e != nil; e = e.Next() {
-		elementAsStep, ok := e.Value.(Step)
-		if !ok {
-			return fmt.Errorf("workflow is invalid")
-		}
-
-		if elementAsStep.GetId() == step.GetId() {
+	for _, previousStep := range s.steps {
+		if previousStep.GetId() == step.GetId() {
 			return fmt.Errorf("step [%s] is already present in workflow", step.GetId())
 		}
 	}
 
-	s.steps.PushBack(step)
+	s.steps = append(s.steps, step)
 	s.dependencies[step] = dependencies
 	return nil
 }
