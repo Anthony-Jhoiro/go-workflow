@@ -1,3 +1,3 @@
-module github.com/Anthony-Jhoiro/go-workflows
+module github.com/Anthony-Jhoiro/go-workflow
 
 go 1.18
