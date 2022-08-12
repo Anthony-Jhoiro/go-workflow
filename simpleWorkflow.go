@@ -14,14 +14,7 @@ type SimpleWorkflow struct {
 	dependencies map[Step][]Step
 }
 
-func sliceContainsStep(slice []Step, element Step) bool {
-	for _, e := range slice {
-		if e == element {
-			return true
-		}
-	}
-	return false
-}
+var stepOutputContextKey struct{}
 
 // hasCycle check if the workflow has cycle starting from currentStep.
 // visited contains the list of already visited steps.
@@ -69,8 +62,6 @@ func (s *SimpleWorkflow) Init(context context.Context) error {
 
 	return nil
 }
-
-var stepOutputContextKey struct{}
 
 // MakeSimpleWorkflow creates a SimpleWorkflow instance
 func MakeSimpleWorkflow(stepCount uint) *SimpleWorkflow {
@@ -230,27 +221,4 @@ func (s *SimpleWorkflow) AddStep(step Step, dependencies []Step) error {
 	s.steps = append(s.steps, step)
 	s.dependencies[step] = dependencies
 	return nil
-}
-
-func getStepThatRequires(requiredStep Step, dependencies map[Step][]Step) []Step {
-	results := make([]Step, 0, len(dependencies))
-	for step, stepDependencies := range dependencies {
-		for _, dependency := range stepDependencies {
-			if dependency == requiredStep {
-				results = append(results, step)
-			}
-			// Switch to next step
-			break
-		}
-	}
-	return results
-}
-
-func areRequirementsFullFilled(step Step, dependencies map[Step][]Step) bool {
-	for _, dep := range dependencies[step] {
-		if dep.GetStatus() != SUCCESS {
-			return false
-		}
-	}
-	return true
 }

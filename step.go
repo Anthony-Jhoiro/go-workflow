@@ -28,3 +28,12 @@ type Workflow interface {
 	Step
 	AddStep(step *Step, dependencies []*Step) error
 }
+
+func sliceContainsStep(slice []Step, element Step) bool {
+	for _, e := range slice {
+		if e == element {
+			return true
+		}
+	}
+	return false
+}

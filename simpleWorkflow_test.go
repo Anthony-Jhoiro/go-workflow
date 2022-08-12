@@ -1,8 +1,10 @@
 package go_workflow
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log"
 	"os"
 	"reflect"
 	"testing"
@@ -407,6 +409,47 @@ func TestSimpleWorkflow_AddStep(t *testing.T) {
 			if err := s.AddStep(tt.args.step, tt.args.dependencies); (err != nil) != tt.wantErr {
 				t.Errorf("AddStep() error = %v, wantErr %v", err, tt.wantErr)
 			}
+		})
+	}
+}
+
+func TestSimpleWorkflow_debug(t *testing.T) {
+	type fields struct {
+		steps        []Step
+		status       Status
+		dependencies map[Step][]Step
+	}
+	tests := []struct {
+		name           string
+		fields         fields
+		expectedStdout string
+	}{
+		{
+			name: "with 2 steps workflow",
+			fields: fields{
+				steps: []Step{&SimpleStep{"step-a", CREATED}, &SimpleStep{"step-b", PENDING}},
+			},
+			expectedStdout: "[DEBUG]: step-a : CREATED\n[DEBUG]: step-b : PENDING\n",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			log.SetFlags(0)
+			var buf bytes.Buffer
+			log.SetOutput(&buf)
+			defer func() {
+				log.SetOutput(os.Stderr)
+			}()
+			s := &SimpleWorkflow{
+				steps:        tt.fields.steps,
+				status:       tt.fields.status,
+				dependencies: tt.fields.dependencies,
+			}
+			s.debug()
+			if buf.String() != tt.expectedStdout {
+				t.Errorf("debug() gotStdout = %v, wantStdout = %v", buf.String(), tt.expectedStdout)
+			}
+
 		})
 	}
 }
